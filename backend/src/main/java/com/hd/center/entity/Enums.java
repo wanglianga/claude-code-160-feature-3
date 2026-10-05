@@ -47,10 +47,22 @@ public final class Enums {
     public enum DisinfectionResult { PASS, FAIL }
 
     /** 耗材出入库类型 */
-    public enum TxnType { PRE_DRAW, USE, RETURN, WASTE, RESTOCK }
+    public enum TxnType { PRE_DRAW, USE, RETURN, WASTE, RESTOCK, SUPPLIER_RETURN }
+
+    /** 耗材批次状态 */
+    public enum BatchStatus { NORMAL, FROZEN, RECALLED }
+
+    /** 召回事件状态 */
+    public enum RecallStatus { OPEN, PROCESSING, CLOSED }
+
+    /** 召回关闭结论：确认召回退回厂家 / 解除冻结 */
+    public enum RecallOutcome { CONFIRMED, LIFTED }
+
+    /** 召回回访状态 */
+    public enum FollowupStatus { PENDING, DONE, UNREACHABLE }
 
     /** 异常事件类型 */
-    public enum ExceptionType { LATE, LEAVE, INFECTION_CHANGE, MACHINE_FAULT, CONSUMABLE_SHORTAGE, HYPOTENSION, ORDER_CHANGE, OTHER }
+    public enum ExceptionType { LATE, LEAVE, INFECTION_CHANGE, MACHINE_FAULT, CONSUMABLE_SHORTAGE, HYPOTENSION, ORDER_CHANGE, RECALL, RECALL_DISCOMFORT, OTHER }
 
     /** 异常处理状态 */
     public enum ExceptionStatus { OPEN, PROCESSING, RESOLVED }

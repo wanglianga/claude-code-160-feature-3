@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -31,6 +32,9 @@ public class DataSeeder implements CommandLineRunner {
     private final PatientRepository patientRepo;
     private final MachineRepository machineRepo;
     private final ConsumableRepository consumableRepo;
+    private final ConsumableBatchRepository batchRepo;
+    private final RecallEventRepository recallRepo;
+    private final RecallFollowupRepository followupRepo;
     private final SessionRepository sessionRepo;
     private final PreAssessmentRepository preRepo;
     private final IntraRecordRepository intraRepo;
@@ -54,6 +58,7 @@ public class DataSeeder implements CommandLineRunner {
         seedMachines();
         seedPatients();
         seedConsumables();
+        seedHistoricalRecall();
         seedDisinfectionHistory();
         seedTodaySessions();
         log.info("演示数据初始化完成");
@@ -159,29 +164,124 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedConsumables() {
-        consumable("DIALYZER", "空心纤维透析器", "FX60", "支", 120, 30, false, "0");
-        consumable("BLOODLINE", "体外循环血路管", "成人型", "套", 150, 40, false, "0");
-        consumable("NEEDLE", "内瘘穿刺针", "16G", "支", 200, 60, false, "0");
-        consumable("HEPARIN", "肝素钠注射液", "12500IU", "支", 80, 20, false, "0");
-        consumable("SALINE", "生理盐水", "500ml", "袋", 100, 30, false, "0");
-        consumable("DIALYSATE", "碳酸氢盐透析液", "A液 10L", "桶", 90, 25, false, "0");
-        consumable("DISINFECTANT", "柠檬酸消毒液", "5L", "桶", 40, 10, false, "0");
-        consumable("FILTER", "水处理滤芯", "10寸 PP棉", "支", 8, 3, false, "0");
-        consumable("DRESSING", "自费敷料贴", "防水型", "片", 60, 15, true, "12.50");
+        consumable("DIALYZER", "空心纤维透析器", "FX60", "支", 30, false, "0");
+        consumable("BLOODLINE", "体外循环血路管", "成人型", "套", 40, false, "0");
+        consumable("NEEDLE", "内瘘穿刺针", "16G", "支", 60, false, "0");
+        consumable("HEPARIN", "肝素钠注射液", "12500IU", "支", 20, false, "0");
+        consumable("SALINE", "生理盐水", "500ml", "袋", 30, false, "0");
+        consumable("DIALYSATE", "碳酸氢盐透析液", "A液 10L", "桶", 25, false, "0");
+        consumable("DISINFECTANT", "柠檬酸消毒液", "5L", "桶", 10, false, "0");
+        consumable("FILTER", "水处理滤芯", "10寸 PP棉", "支", 3, false, "0");
+        consumable("DRESSING", "自费敷料贴", "防水型", "片", 15, true, "12.50");
+        // 批次入库：库存由入库流水累计，出库按 FEFO 分配批次
+        batch("DIALYZER", "FX60-2508A", "德医医疗", 70, 4);
+        batch("DIALYZER", "FX60-2509B", "德医医疗", 50, 8);
+        batch("BLOODLINE", "BL-2507C", "康诚生物", 80, 5);
+        batch("BLOODLINE", "BL-2509D", "康诚生物", 70, 9);
+        batch("NEEDLE", "ND-2508", "康诚生物", 200, 10);
+        batch("HEPARIN", "HP-2506", "华瑞制药", 80, 7);
+        batch("SALINE", "SA-2508", "华瑞制药", 100, 11);
+        batch("DIALYSATE", "DL-2507", "德医医疗", 90, 6);
+        batch("DISINFECTANT", "DS-2508", "洁诺化工", 40, 12);
+        batch("FILTER", "FT-2505", "洁诺化工", 8, 18);
+        batch("DRESSING", "DR-2508", "康诚生物", 60, 12);
     }
 
-    private void consumable(String code, String name, String spec, String unit, int stock,
+    private void consumable(String code, String name, String spec, String unit,
                             int safeStock, boolean selfPay, String price) {
         Consumable c = new Consumable();
         c.setCode(code);
         c.setName(name);
         c.setSpec(spec);
         c.setUnit(unit);
-        c.setStock(stock);
+        c.setStock(0);
         c.setSafeStock(safeStock);
         c.setSelfPay(selfPay);
         c.setPrice(new BigDecimal(price));
         consumableRepo.save(c);
+    }
+
+    /** 批次入库：建立批次档案并记录入库流水（库存随之增加） */
+    private void batch(String consumableCode, String batchNo, String supplier, int qty, int expiryMonths) {
+        Consumable c = consumableRepo.findAllByOrderByCode().stream()
+                .filter(x -> x.getCode().equals(consumableCode)).findFirst().orElseThrow();
+        consumableService.restock(c, qty, batchNo, supplier, LocalDate.now().plusMonths(expiryMonths),
+                "赵工", "批次入库 " + batchNo);
+    }
+
+    /**
+     * 历史已关闭召回（供应商考核演示数据）：血路管批次 BL-2505X 环氧乙烷残留超标，
+     * 剩余库存退回厂家，患者回访均无不适，处理结果计入供应商考核。
+     */
+    private void seedHistoricalRecall() {
+        Consumable bloodline = consumableRepo.findAllByOrderByCode().stream()
+                .filter(c -> c.getCode().equals("BLOODLINE")).findFirst().orElseThrow();
+        ConsumableBatch old = new ConsumableBatch();
+        old.setConsumable(bloodline);
+        old.setBatchNo("BL-2505X");
+        old.setSupplier("康诚生物");
+        old.setProductionDate(LocalDate.now().minusMonths(6));
+        old.setExpiryDate(LocalDate.now().plusMonths(2));
+        old.setReceivedQty(60);
+        old.setStatus(BatchStatus.RECALLED);
+        old.setCreatedAt(LocalDateTime.now().minusDays(70));
+        old = batchRepo.save(old);
+
+        // 历史流水：入库 +60、消耗 -47、退回厂家 -13（净额 0，不影响当前库存）
+        backdatedTxn(bloodline, old, TxnType.RESTOCK, 60, "赵工", "批次入库 BL-2505X", 70);
+        backdatedTxn(bloodline, old, TxnType.USE, -47, "李静", "历史消耗汇总", 30);
+        backdatedTxn(bloodline, old, TxnType.SUPPLIER_RETURN, -13, "赵工", "召回退回厂家", 5);
+
+        RecallEvent recall = new RecallEvent();
+        recall.setRecallNo("RC" + LocalDate.now().minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE) + "-001");
+        recall.setBatch(old);
+        recall.setReason("厂家自检发现批次 BL-2505X 血路管环氧乙烷残留超标，主动召回");
+        recall.setStatus(RecallStatus.CLOSED);
+        recall.setOutcome(RecallOutcome.CONFIRMED);
+        recall.setConclusion("剩余 13 套已退回厂家；2 名相关患者回访均无不适、无需复查。供应商已提交整改报告。");
+        recall.setCreatedBy("王敏（护士长）");
+        recall.setCreatedAt(LocalDateTime.now().minusDays(7));
+        recall.setClosedBy("王敏（护士长）");
+        recall.setClosedAt(LocalDateTime.now().minusDays(5));
+        recall = recallRepo.save(recall);
+
+        // 历史回访记录（均已回访、无不适、无需复查）
+        List<Patient> patients = patientRepo.findByActiveTrueOrderByMrn();
+        for (int i = 0; i < 2 && i < patients.size(); i++) {
+            RecallFollowup f = new RecallFollowup();
+            f.setRecall(recall);
+            f.setPatientId(patients.get(i).getId());
+            f.setPatientName(patients.get(i).getName());
+            f.setSessionDate(LocalDate.now().minusDays(8));
+            f.setShift(Shift.AM);
+            f.setStatus(FollowupStatus.DONE);
+            f.setDiscomfort(false);
+            f.setFollowupNote("电话回访，自述无不适");
+            f.setNurseName("李静");
+            f.setFollowupAt(LocalDateTime.now().minusDays(6));
+            f.setReviewNeeded(false);
+            f.setReviewNote("无不适，无需复查");
+            f.setDoctorName("陈国强");
+            f.setReviewAt(LocalDateTime.now().minusDays(6));
+            f.setCreatedAt(LocalDateTime.now().minusDays(7));
+            followupRepo.save(f);
+        }
+    }
+
+    /** 补记历史流水（仅留追溯记录，不影响当前库存） */
+    private void backdatedTxn(Consumable c, ConsumableBatch batch, TxnType type, int signedQty,
+                              String operator, String note, int daysAgo) {
+        ConsumableTxn txn = new ConsumableTxn();
+        txn.setConsumableId(c.getId());
+        txn.setConsumableName(c.getName());
+        txn.setQty(signedQty);
+        txn.setType(type);
+        txn.setBatchId(batch.getId());
+        txn.setBatchNo(batch.getBatchNo());
+        txn.setOperatorName(operator);
+        txn.setNote(note);
+        txn.setCreatedAt(LocalDateTime.now().minusDays(daysAgo));
+        txnRepo.save(txn);
     }
 
     /** 过去三天每台机的日常消毒记录（消毒合规统计用） */

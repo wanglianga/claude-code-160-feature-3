@@ -1,5 +1,14 @@
 <template>
   <div v-loading="loading">
+    <el-alert v-if="(data.activeRecalls || []).length" type="error" :closable="false" style="margin-bottom:16px">
+      <template #title>
+        进行中耗材召回 {{ data.activeRecallCount }} 起：
+        {{ data.activeRecalls.map(r => `${r.recallNo}（${r.consumableName} ${r.batchNo}）`).join('、') }}
+        <el-button size="small" type="danger" plain style="margin-left:8px" @click="$router.push('/recalls')">
+          前往处理
+        </el-button>
+      </template>
+    </el-alert>
     <el-row :gutter="16">
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">

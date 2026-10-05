@@ -52,6 +52,7 @@ const ALL_MENUS = [
   { path: '/treatment', title: '透析治疗', icon: 'FirstAidKit', roles: ['ADMIN', 'NURSE', 'DOCTOR'] },
   { path: '/machines', title: '机器与消毒', icon: 'SetUp', roles: ['ADMIN', 'NURSE', 'ENGINEER'] },
   { path: '/consumables', title: '耗材库存', icon: 'Box', roles: ['ADMIN', 'NURSE', 'ENGINEER'] },
+  { path: '/recalls', title: '批次召回', icon: 'Bell', roles: ['ADMIN', 'NURSE', 'DOCTOR', 'ENGINEER'] },
   { path: '/exceptions', title: '异常上报', icon: 'WarningFilled', roles: null },
   { path: '/billing', title: '收费核对', icon: 'Money', roles: ['ADMIN', 'FINANCE'] },
   { path: '/stats', title: '统计分析', icon: 'DataAnalysis', roles: ['ADMIN', 'FINANCE'] }

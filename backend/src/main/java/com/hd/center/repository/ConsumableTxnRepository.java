@@ -13,4 +13,7 @@ public interface ConsumableTxnRepository extends JpaRepository<ConsumableTxn, Lo
     List<ConsumableTxn> findByTypeAndSessionIdIn(TxnType type, Collection<Long> sessionIds);
     List<ConsumableTxn> findByCreatedAtBetween(LocalDateTime from, LocalDateTime to);
     List<ConsumableTxn> findTop100ByOrderByCreatedAtDesc();
+    List<ConsumableTxn> findByBatchId(Long batchId);
+    List<ConsumableTxn> findByBatchIdAndSessionId(Long batchId, Long sessionId);
+    List<ConsumableTxn> findByBatchIdIn(Collection<Long> batchIds);
 }

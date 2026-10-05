@@ -27,6 +27,7 @@ public class StatsService {
     private final ConsumableTxnRepository txnRepo;
     private final ConsumableRepository consumableRepo;
     private final DisinfectionRecordRepository disinfectionRepo;
+    private final RecallEventRepository recallRepo;
 
     /** 今日工作台总览 */
     public Map<String, Object> dashboard() {
@@ -66,6 +67,20 @@ public class StatsService {
                     return m;
                 }).toList();
         result.put("lowStock", lowStock);
+
+        // 进行中的耗材召回
+        List<RecallEvent> activeRecalls = recallRepo.findByStatusInOrderByCreatedAtDesc(
+                List.of(RecallStatus.OPEN, RecallStatus.PROCESSING));
+        result.put("activeRecallCount", activeRecalls.size());
+        result.put("activeRecalls", activeRecalls.stream().map(r -> {
+            Map<String, Object> m = new LinkedHashMap<String, Object>();
+            m.put("id", r.getId());
+            m.put("recallNo", r.getRecallNo());
+            m.put("consumableName", r.getBatch().getConsumable().getName());
+            m.put("batchNo", r.getBatch().getBatchNo());
+            m.put("status", r.getStatus().name());
+            return m;
+        }).toList());
         return result;
     }
 

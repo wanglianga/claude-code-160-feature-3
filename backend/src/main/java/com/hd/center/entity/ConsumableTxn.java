@@ -35,6 +35,12 @@ public class ConsumableTxn {
     /** 关联治疗单（预领/使用时） */
     private Long sessionId;
 
+    /** 关联耗材批次（批次追溯） */
+    private Long batchId;
+
+    @Column(length = 64)
+    private String batchNo;
+
     @Column(length = 64)
     private String patientName;
 

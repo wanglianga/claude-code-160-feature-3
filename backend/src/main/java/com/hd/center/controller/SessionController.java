@@ -17,9 +17,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 排班看板与治疗单主流程。
@@ -43,15 +47,64 @@ public class SessionController {
     private final ConsumableService consumableService;
     private final ExceptionService exceptionService;
     private final ConsumableRepository consumableRepo;
+    private final ConsumableBatchRepository batchRepo;
+    private final RecallFollowupRepository followupRepo;
 
-    /** 看板：某日某班次的机位与治疗单 */
+    /** 看板：某日某班次的机位与治疗单；recallAlerts 提示预领了冻结/召回批次、需更换批次的治疗单 */
     @GetMapping("/board")
     public Map<String, Object> board(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
                                      @RequestParam Shift shift) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("machines", machineRepo.findByActiveTrueOrderByCode());
-        result.put("sessions", sessionRepo.findBySessionDateAndShiftOrderBySeqNo(date, shift));
+        List<DialysisSession> sessions = sessionRepo.findBySessionDateAndShiftOrderBySeqNo(date, shift);
+        result.put("sessions", sessions);
+        result.put("recallAlerts", recallAlerts(sessions));
         return result;
+    }
+
+    /** 已排班治疗中仍持有冻结/召回批次预领耗材的提示（自动提示更换批次） */
+    private List<Map<String, Object>> recallAlerts(List<DialysisSession> sessions) {
+        List<Long> sessionIds = sessions.stream()
+                .filter(s -> s.getStatus() == SessionStatus.SCHEDULED || s.getStatus() == SessionStatus.ASSESSED)
+                .map(DialysisSession::getId).toList();
+        List<Map<String, Object>> alerts = new ArrayList<>();
+        if (sessionIds.isEmpty()) {
+            return alerts;
+        }
+        // 预领为负、归还为正：按 治疗单+批次 计算未更换的冻结/召回批次余量
+        Map<String, Integer> outstanding = new LinkedHashMap<>();
+        Map<String, ConsumableTxn> sample = new LinkedHashMap<>();
+        List<ConsumableTxn> txns = new ArrayList<>();
+        txns.addAll(txnRepo.findByTypeAndSessionIdIn(TxnType.PRE_DRAW, sessionIds));
+        txns.addAll(txnRepo.findByTypeAndSessionIdIn(TxnType.RETURN, sessionIds));
+        Set<Long> batchIds = new HashSet<>();
+        for (ConsumableTxn t : txns) {
+            if (t.getBatchId() == null) continue;
+            String key = t.getSessionId() + "@" + t.getBatchId();
+            outstanding.merge(key, -t.getQty(), Integer::sum);
+            sample.putIfAbsent(key, t);
+            batchIds.add(t.getBatchId());
+        }
+        Map<Long, ConsumableBatch> batches = new HashMap<>();
+        batchRepo.findAllById(batchIds).forEach(b -> batches.put(b.getId(), b));
+        Map<Long, DialysisSession> sessionMap = new HashMap<>();
+        sessions.forEach(s -> sessionMap.put(s.getId(), s));
+        outstanding.forEach((key, qty) -> {
+            if (qty <= 0) return;
+            ConsumableTxn t = sample.get(key);
+            ConsumableBatch batch = batches.get(t.getBatchId());
+            if (batch == null || batch.getStatus() == BatchStatus.NORMAL) return;
+            DialysisSession s = sessionMap.get(t.getSessionId());
+            Map<String, Object> m = new LinkedHashMap<String, Object>();
+            m.put("sessionId", t.getSessionId());
+            m.put("patientName", s != null ? s.getPatient().getName() : t.getPatientName());
+            m.put("consumableName", t.getConsumableName());
+            m.put("batchNo", batch.getBatchNo());
+            m.put("batchStatus", batch.getStatus().name());
+            m.put("qty", qty);
+            alerts.add(m);
+        });
+        return alerts;
     }
 
     public record GenerateRequest(@NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -134,20 +187,34 @@ public class SessionController {
         session.setStatus(SessionStatus.ABSENT);
         sessionRepo.save(session);
 
-        // 预领耗材归还
-        List<ConsumableTxn> preDrawn = txnRepo.findBySessionId(id).stream()
-                .filter(t -> t.getType() == TxnType.PRE_DRAW).toList();
-        for (ConsumableTxn t : preDrawn) {
+        // 预领耗材归还：按 耗材+批次 计算未归还余量（召回更换批次后原批次已退回，不能重复归还）
+        List<ConsumableTxn> sessionTxns = txnRepo.findBySessionId(id);
+        Map<String, Integer> outstanding = new LinkedHashMap<>();
+        Map<String, ConsumableTxn> preDrawSample = new LinkedHashMap<>();
+        for (ConsumableTxn t : sessionTxns) {
+            if (t.getType() != TxnType.PRE_DRAW && t.getType() != TxnType.RETURN) continue;
+            String key = t.getConsumableId() + "@" + t.getBatchId();
+            outstanding.merge(key, -t.getQty(), Integer::sum);
+            if (t.getType() == TxnType.PRE_DRAW) {
+                preDrawSample.putIfAbsent(key, t);
+            }
+        }
+        int returned = 0;
+        for (Map.Entry<String, Integer> entry : outstanding.entrySet()) {
+            if (entry.getValue() <= 0) continue;
+            ConsumableTxn t = preDrawSample.get(entry.getKey());
+            if (t == null) continue;
             Consumable c = consumableRepo.findById(t.getConsumableId()).orElse(null);
             if (c != null) {
-                consumableService.transact(c, TxnType.RETURN, -t.getQty(), id,
-                        session.getPatient().getName(), current.name(), "请假归还预领");
+                consumableService.transactBatch(c, TxnType.RETURN, entry.getValue(), id,
+                        session.getPatient().getName(), current.name(), "请假归还预领", t.getBatchId());
+                returned++;
             }
         }
         ExceptionEvent event = exceptionService.raise(ExceptionType.LEAVE, session.getPatient(), session,
                 session.getMachine(),
                 "患者「" + session.getPatient().getName() + "」临时请假，预领耗材已归还。" + reason, current.name());
-        return Map.of("session", session, "returned", preDrawn.size(), "exception", event);
+        return Map.of("session", session, "returned", returned, "exception", event);
     }
 
     /** 上机开始透析 */
@@ -177,6 +244,7 @@ public class SessionController {
         result.put("exceptions", exceptionRepo.findBySessionIdOrderByCreatedAt(id));
         result.put("billing", billingRepo.findBySessionId(id).orElse(null));
         result.put("consumables", txnRepo.findBySessionId(id));
+        result.put("recallFollowups", followupRepo.findBySessionId(id));
         LocalDate day = session.getSessionDate();
         result.put("machineDisinfection", disinfectionRepo.findByMachineIdOrderByDoneAtDesc(session.getMachine().getId())
                 .stream().filter(r -> r.getDoneAt().toLocalDate().equals(day)).limit(10).toList());

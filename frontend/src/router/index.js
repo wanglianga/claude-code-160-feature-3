@@ -13,6 +13,7 @@ const routes = [
       { path: 'treatment', name: 'treatment', component: () => import('../views/TreatmentView.vue'), meta: { title: '透析治疗', roles: ['ADMIN', 'NURSE', 'DOCTOR'] } },
       { path: 'machines', name: 'machines', component: () => import('../views/MachinesView.vue'), meta: { title: '机器与消毒', roles: ['ADMIN', 'NURSE', 'ENGINEER'] } },
       { path: 'consumables', name: 'consumables', component: () => import('../views/ConsumablesView.vue'), meta: { title: '耗材库存', roles: ['ADMIN', 'NURSE', 'ENGINEER'] } },
+      { path: 'recalls', name: 'recalls', component: () => import('../views/RecallsView.vue'), meta: { title: '批次召回', roles: ['ADMIN', 'NURSE', 'DOCTOR', 'ENGINEER'] } },
       { path: 'exceptions', name: 'exceptions', component: () => import('../views/ExceptionsView.vue'), meta: { title: '异常上报' } },
       { path: 'billing', name: 'billing', component: () => import('../views/BillingView.vue'), meta: { title: '收费核对', roles: ['ADMIN', 'FINANCE'] } },
       { path: 'stats', name: 'stats', component: () => import('../views/StatsView.vue'), meta: { title: '统计分析', roles: ['ADMIN', 'FINANCE'] } }

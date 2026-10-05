@@ -16,10 +16,15 @@ export const LABELS = {
   DepartureMode: { SELF: '自行离开', FAMILY: '家属接回', SHUTTLE: '班车送回', WHEELCHAIR: '轮椅', STRETCHER: '平车' },
   DisinfectionType: { DAILY: '日常消毒', HEAT: '热消毒', CITRIC_ACID: '柠檬酸消毒', FILTER_CHANGE: '滤芯更换', WATER_TREATMENT: '水处理维护', WATER_TEST: '水质检测' },
   DisinfectionResult: { PASS: '合格', FAIL: '不合格' },
-  TxnType: { PRE_DRAW: '预领', USE: '使用', RETURN: '归还', WASTE: '损耗', RESTOCK: '入库' },
+  TxnType: { PRE_DRAW: '预领', USE: '使用', RETURN: '归还', WASTE: '损耗', RESTOCK: '入库', SUPPLIER_RETURN: '退回厂家' },
+  BatchStatus: { NORMAL: '正常', FROZEN: '已冻结', RECALLED: '已召回' },
+  RecallStatus: { OPEN: '待处理', PROCESSING: '处理中', CLOSED: '已关闭' },
+  RecallOutcome: { CONFIRMED: '确认召回退回厂家', LIFTED: '解除冻结' },
+  FollowupStatus: { PENDING: '待回访', DONE: '已回访', UNREACHABLE: '联系不上' },
   ExceptionType: {
     LATE: '患者迟到', LEAVE: '临时请假', INFECTION_CHANGE: '感染标记变化', MACHINE_FAULT: '机器故障',
-    CONSUMABLE_SHORTAGE: '耗材不足', HYPOTENSION: '透析中低血压', ORDER_CHANGE: '医嘱调整', OTHER: '其他'
+    CONSUMABLE_SHORTAGE: '耗材不足', HYPOTENSION: '透析中低血压', ORDER_CHANGE: '医嘱调整',
+    RECALL: '耗材召回', RECALL_DISCOMFORT: '召回回访不适', OTHER: '其他'
   },
   ExceptionStatus: { OPEN: '待处理', PROCESSING: '处理中', RESOLVED: '已解决' },
   BillingStatus: { PENDING: '待核对', CONFIRMED: '已核对' }
@@ -35,7 +40,10 @@ export const TAG_TYPES = {
   BillingStatus: { PENDING: 'warning', CONFIRMED: 'success' },
   RiskLevel: { LOW: 'success', MEDIUM: 'warning', HIGH: 'danger' },
   InfectionMarker: { NONE: 'success', HBV: 'warning', HCV: 'warning', TP: 'danger', OTHER: 'danger' },
-  DisinfectionResult: { PASS: 'success', FAIL: 'danger' }
+  DisinfectionResult: { PASS: 'success', FAIL: 'danger' },
+  BatchStatus: { NORMAL: 'success', FROZEN: 'warning', RECALLED: 'danger' },
+  RecallStatus: { OPEN: 'danger', PROCESSING: 'warning', CLOSED: 'success' },
+  FollowupStatus: { PENDING: 'danger', DONE: 'success', UNREACHABLE: 'info' }
 }
 
 export function label(group, value) {

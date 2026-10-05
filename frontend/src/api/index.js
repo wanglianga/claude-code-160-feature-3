@@ -67,6 +67,17 @@ export default {
   consumableTxn: (id, data) => http.post(`/consumables/${id}/txn`, data),
   consumableTxns: (params) => http.get('/consumables/txns', { params }),
   consumableWarnings: () => http.get('/consumables/warnings'),
+  consumableBatches: (consumableId) => http.get('/consumables/batches', { params: { consumableId } }),
+  // 批次召回
+  recalls: () => http.get('/recalls'),
+  createRecall: (data) => http.post('/recalls', data),
+  recallDetail: (id) => http.get(`/recalls/${id}`),
+  recallFollowup: (fid, data) => http.put(`/recalls/followups/${fid}`, data),
+  recallReview: (fid, data) => http.put(`/recalls/followups/${fid}/review`, data),
+  recallReplace: (id, sessionId) => http.post(`/recalls/${id}/replace/${sessionId}`),
+  recallReplaceAll: (id) => http.post(`/recalls/${id}/replace-all`),
+  recallClose: (id, data) => http.post(`/recalls/${id}/close`, data),
+  supplierStats: () => http.get('/recalls/supplier-stats'),
   // 异常
   exceptions: (status) => http.get('/exceptions', { params: { status } }),
   createException: (data) => http.post('/exceptions', data),

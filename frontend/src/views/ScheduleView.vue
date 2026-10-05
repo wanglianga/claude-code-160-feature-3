@@ -27,6 +27,16 @@
         </template>
       </el-alert>
 
+      <el-alert v-if="recallAlerts.length" type="error" :closable="false" class="gen-result">
+        <template #title>
+          {{ recallAlerts.length }} 条治疗单预领了冻结/召回批次耗材，请更换批次：
+          {{ recallAlerts.map(a => `${a.patientName}(${a.batchNo})`).join('、') }}
+          <el-button size="small" type="danger" plain style="margin-left:8px" @click="$router.push('/recalls')">
+            前往召回处理
+          </el-button>
+        </template>
+      </el-alert>
+
       <el-table :data="sessions" v-loading="loading" border stripe>
         <el-table-column label="机位" width="90" fixed>
           <template #default="{ row }">
@@ -38,9 +48,12 @@
         <el-table-column label="顺序" width="60" align="center">
           <template #default="{ row }">{{ row.seqNo }}</template>
         </el-table-column>
-        <el-table-column label="患者" width="100">
+        <el-table-column label="患者" width="130">
           <template #default="{ row }">
             <el-link type="primary" @click="openDetail(row)">{{ row.patient.name }}</el-link>
+            <el-tooltip v-if="recallAlertOf(row.id)" content="预领耗材涉及冻结/召回批次，请更换批次" placement="top">
+              <el-tag size="small" type="danger" style="margin-left:4px">召回</el-tag>
+            </el-tooltip>
           </template>
         </el-table-column>
         <el-table-column label="感染标记" width="90" align="center">
@@ -209,6 +222,9 @@ const moving = ref(false)
 const addDialog = ref(false)
 const addForm = reactive({ patientId: null, machineId: null, date: dayjs().format('YYYY-MM-DD'), shift: 'AM' })
 const patientOptions = ref([])
+const recallAlerts = ref([])
+
+const recallAlertOf = (sessionId) => recallAlerts.value.find(a => a.sessionId === sessionId)
 
 const zoneColors = { NORMAL: '#67c23a', HBV: '#e6a23c', HCV: '#b37feb', ISOLATION: '#f56c6c' }
 const zoneColor = (z) => zoneColors[z] || '#909399'
@@ -221,6 +237,7 @@ async function loadBoard() {
     const data = await api.board(date.value, shift.value)
     sessions.value = data.sessions
     machines.value = data.machines
+    recallAlerts.value = data.recallAlerts || []
   } finally {
     loading.value = false
   }

@@ -42,4 +42,8 @@ public class Consumable {
 
     @Column(precision = 10, scale = 2)
     private BigDecimal price = BigDecimal.ZERO;
+
+    /** 被冻结/召回批次占用的库存（列表接口填充，不持久化） */
+    @Transient
+    private Integer frozenQty;
 }

@@ -62,6 +62,20 @@
           <el-tabs v-model="tab">
             <!-- 总览 -->
             <el-tab-pane label="治疗单总览" name="overview">
+              <el-alert v-for="f in current.recallFollowups || []" :key="f.id" type="error" :closable="false"
+                        style="margin-bottom:10px">
+                <template #title>
+                  本治疗涉及召回批次 {{ f.recall?.batch?.batchNo }}（召回单 {{ f.recall?.recallNo }}）：
+                  回访{{ label('FollowupStatus', f.status) }}
+                  <template v-if="f.discomfort === true">
+                    ，患者不适「{{ f.symptoms }}」
+                  </template>
+                  <template v-if="f.reviewNeeded === true">，医生评估需复查：{{ f.reviewNote }}</template>
+                  <template v-else-if="f.reviewNeeded === false">，无需复查</template>
+                  — 当日机器 {{ current.session.machine.code }}、护士 {{ current.session.nurseName || '-' }}、
+                  耗材批次与透析参数见下方各页签
+                </template>
+              </el-alert>
               <el-descriptions :column="3" border size="small">
                 <el-descriptions-item label="机位">{{ current.session.machine.code }}（{{ label('MachineZone', current.session.machine.zone) }}）</el-descriptions-item>
                 <el-descriptions-item label="日期班次">{{ current.session.sessionDate }} {{ label('Shift', current.session.shift) }}</el-descriptions-item>
@@ -252,6 +266,9 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="qty" label="数量" width="70" />
+                <el-table-column label="批号" width="110">
+                  <template #default="{ row }">{{ row.batchNo || '-' }}</template>
+                </el-table-column>
                 <el-table-column prop="operatorName" label="操作人" width="90" />
                 <el-table-column label="时间" width="150">
                   <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>

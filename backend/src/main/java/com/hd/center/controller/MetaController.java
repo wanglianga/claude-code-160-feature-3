@@ -52,11 +52,20 @@ public class MetaController {
                 {"PASS", "合格"}, {"FAIL", "不合格"}}));
         map.put("TxnType", list(new String[][]{
                 {"PRE_DRAW", "预领"}, {"USE", "使用"}, {"RETURN", "归还"},
-                {"WASTE", "损耗"}, {"RESTOCK", "入库"}}));
+                {"WASTE", "损耗"}, {"RESTOCK", "入库"}, {"SUPPLIER_RETURN", "退回厂家"}}));
+        map.put("BatchStatus", list(new String[][]{
+                {"NORMAL", "正常"}, {"FROZEN", "已冻结"}, {"RECALLED", "已召回"}}));
+        map.put("RecallStatus", list(new String[][]{
+                {"OPEN", "待处理"}, {"PROCESSING", "处理中"}, {"CLOSED", "已关闭"}}));
+        map.put("RecallOutcome", list(new String[][]{
+                {"CONFIRMED", "确认召回退回厂家"}, {"LIFTED", "解除冻结"}}));
+        map.put("FollowupStatus", list(new String[][]{
+                {"PENDING", "待回访"}, {"DONE", "已回访"}, {"UNREACHABLE", "联系不上"}}));
         map.put("ExceptionType", list(new String[][]{
                 {"LATE", "患者迟到"}, {"LEAVE", "临时请假"}, {"INFECTION_CHANGE", "感染标记变化"},
                 {"MACHINE_FAULT", "机器故障"}, {"CONSUMABLE_SHORTAGE", "耗材不足"},
-                {"HYPOTENSION", "透析中低血压"}, {"ORDER_CHANGE", "医嘱调整"}, {"OTHER", "其他"}}));
+                {"HYPOTENSION", "透析中低血压"}, {"ORDER_CHANGE", "医嘱调整"},
+                {"RECALL", "耗材召回"}, {"RECALL_DISCOMFORT", "召回回访不适"}, {"OTHER", "其他"}}));
         map.put("ExceptionStatus", list(new String[][]{
                 {"OPEN", "待处理"}, {"PROCESSING", "处理中"}, {"RESOLVED", "已解决"}}));
         map.put("BillingStatus", list(new String[][]{
