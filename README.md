@@ -8,6 +8,7 @@
 - 异常上报贯穿全程：迟到、请假、感染标记变化、机器故障、耗材不足、透析中低血压、医嘱调整
 - 收费窗口核对医保、自费耗材、补收费用；管理端查看机位利用率、异常率、耗材损耗、消毒合规
 - 护士长调班时可预览影响：波及哪些患者、哪些机器消毒时间被压缩、哪些耗材已预领
+- **耗材批次追溯与厂家召回**：耗材按厂家批号（含供应商、生产/失效日期）管理，出库按近效期优先（FEFO）；某批次被厂家召回时，平台依据出库与患者使用记录自动列出受影响治疗记录——护士逐例电话回访是否不适、库管冻结未使用库存（召回期间库房停发该批次）、医生从治疗记录查看当日机器/护士/耗材批号/透析参数并给出复查结论；已排治疗一键更换批次；办结做质量定性并计入供应商考核
 
 ## 技术栈
 
@@ -91,7 +92,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}' | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
 
-# 今日工作台：18 条治疗单、机位状态分布、待处理异常、耗材预警
+# 今日工作台：18 条治疗单、机位状态分布、待处理异常、耗材预警、进行中召回
 curl -s http://localhost:8080/api/stats/dashboard -H "Authorization: Bearer $TOKEN"
 
 # 排班看板：感染标记自动匹配分区（HBV 患者排到乙肝区机位）
@@ -123,8 +124,64 @@ curl -s http://localhost:8080/api/stats/overview -H "Authorization: Bearer $TOKE
 - 感染标记变更自动上报异常并提示未来排班的分区不匹配
 - 机器标记故障自动上报异常并列出当日受影响患者
 - 耗材出库低于安全库存自动上报「耗材不足」异常
+- 耗材按厂家批号入库；出库近效期优先（FEFO），自动跳过召回冻结批次；请假/换批按原批次归还
 
-### 3. 前端构建与联调
+### 3. 批次召回全流程（curl 实际执行通过）
+
+演示数据内置：透析器批号 `DLZ-260401` 一个处理中的召回（受影响 25 条治疗/17 名患者，含 1 例回访不适已安排复查、1 例已一键换批），以及一批柠檬酸消毒液的已办结召回（确认质量缺陷、扣分 20，供应商考核可查）。
+
+```bash
+BASE=http://localhost:8080   # $TOKEN 见上文登录步骤
+
+# 批次台账与批次入库（批号/供应商/效期）
+curl -s "$BASE/api/consumables/batches?consumableId=1" -H "Authorization: Bearer $TOKEN"
+curl -s -X POST "$BASE/api/consumables/1/batches" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"batchNo":"DLZ-261005","supplier":"费森尤斯医疗","expiryDate":"2028-09-01","qty":5}'
+
+# 发起厂家召回：冻结未使用库存、列出受影响治疗记录、上报异常
+curl -s -X POST "$BASE/api/recalls" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"consumableId":1,"batchNo":"DLZ-260515","reason":"厂家来函：外壳标识不清","manufacturerDocNo":"FME-RC-X1"}'
+
+# 召回详情（followUps 受影响治疗 / replacementBatches 可换批次 / batchTxns 追溯流水）
+curl -s "$BASE/api/recalls/1" -H "Authorization: Bearer $TOKEN"
+
+# 冻结批次出库被拒绝（400：已因厂家召回冻结，停止发放）
+curl -s -X POST "$BASE/api/consumables/1/txn" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"type":"USE","qty":1,"batchId":1}'
+
+# 护士回访：报告不适自动上报「召回回访不适」异常，转医生复查
+curl -s -X POST "$BASE/api/recalls/1/follow-ups/{fid}" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"DISCOMFORT","symptoms":"低热、畏寒","note":"透析当晚出现"}'
+# 医生从治疗记录核对当日机器/护士/耗材批号/透中参数后给复查结论
+curl -s -X POST "$BASE/api/recalls/1/follow-ups/{fid}/review" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"result":"RECHECK_SCHEDULED","recheckPlan":"复查血常规、CRP","reviewNote":"已核对治疗全要素"}'
+# 未开始的治疗一键换批（召回批号退回冻结批次，新批次重新预领）
+curl -s -X POST "$BASE/api/recalls/1/follow-ups/{fid}/replace" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"replacementBatchId":3}'
+# 办结：质量定性 + 供应商扣分 + 未使用库存退厂（全部回访且不适病例复查完才可办结）
+curl -s -X POST "$BASE/api/recalls/1/close" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"verdict":"CONFIRMED_DEFECT","deduction":20,"returnUnused":true,"closeNote":"冻结库存退厂，供应商考核扣分"}'
+# 耗材质量与供应商考核（按已办结召回汇总，基础分 100）
+curl -s "$BASE/api/recalls/supplier-assessment" -H "Authorization: Bearer $TOKEN"
+# 排班看板召回预警：某日待治疗且预领了召回批次、尚未换批的治疗单
+curl -s "$BASE/api/sessions/board?date=$(date +%F)&shift=AM" -H "Authorization: Bearer $TOKEN"
+```
+
+已验证的关键行为：
+
+- 发起召回立即冻结批次，冻结量随「请假未治疗患者预领归还」自动修正
+- 召回期间冻结批次任何出库（预领/使用/损耗）返回 400；FEFO 自动挑批跳过冻结批次
+- 看板只对「未开始且未换批」的治疗提示更换批次；换批/办结后预警自动消失
+- 回访「报告不适」自动产生异常，医生复查前召回不可办结；治疗单详情聚合机器、护士、耗材批号与透中参数
+- 办结时未使用库存生成「召回出库」退厂，批次转「已退厂家」；质量定性与扣分进入供应商考核
+- 已请假（ABSENT）治疗不产生回访单，其预领的召回批次归还冻结库存随召回退厂
+
+### 4. 前端构建与联调
 
 ```bash
 cd frontend && npm install && npm run build   # 构建通过，产出 dist/
@@ -140,8 +197,9 @@ npm run dev                                    # 开发服务器 5173，/api 代
 | 患者管理 | 档案、感染标记、风险等级、固定透析日、接送时间窗、熟悉护士 |
 | 透析治疗 | 治疗单总览（异常时间线+本机消毒记录）、透前评估、透中记录、透后记录、耗材与费用 |
 | 机器与消毒 | 机位状态变更（故障自动上报）、消毒/滤芯/水处理记录登记 |
-| 耗材库存 | 库存与安全库存预警、出入库（使用/损耗/归还/入库）、流水查询 |
-| 异常上报 | 全类型异常的查询、上报、处理闭环 |
+| 耗材库存 | 库存与安全库存预警、按厂家批号的批次台账（供应商/生产/失效日期/在库量）、批次入库补货、按批/FEFO 出入库、批次追溯流水、发起召回 |
+| 批次召回 | 召回单全流程：冻结停发、受影响治疗记录、护士回访（不适自动上报）、医生复查、一键换批、办结质量定性、耗材质量与供应商考核 |
+| 异常上报 | 全类型异常（含耗材召回、召回回访不适）的查询、上报、处理闭环 |
 | 收费核对 | 医保/自费耗材/补收费用核对，确认后治疗单完成 |
 | 统计分析 | 机位利用率、异常类型分布、耗材损耗、消毒合规图表 |
 
@@ -154,24 +212,26 @@ npm run dev                                    # 开发服务器 5173，/api 代
 │   ├── settings.xml            # Maven 阿里云镜像（加速依赖下载）
 │   └── src/main/java/com/hd/center/
 │       ├── config/             # 安全(JWT)、全局异常、数据种子
-│       ├── entity/             # 12 个实体 + 枚举
+│       ├── entity/             # 实体（含 ConsumableBatch/RecallOrder/RecallFollowUp）+ 枚举
 │       ├── repository/         # Spring Data JPA
-│       ├── service/            # 排班算法/耗材/计费/统计/异常
-│       └── controller/         # REST API
+│       ├── service/            # 排班算法/耗材批次/召回/计费/统计/异常
+│       └── controller/         # REST API（含 RecallController）
 └── frontend/                   # Vue 3 前端
     ├── Dockerfile
     ├── nginx.conf              # SPA 路由回退 + /api 反代
     └── src/
         ├── api/                # axios 封装
         ├── layout/             # 主布局（按角色过滤菜单）
-        ├── views/              # 9 个业务页面
+        ├── views/              # 10 个业务页面（含批次召回 RecallView）
         └── utils/labels.js     # 枚举中文标签
 ```
 
 ## 核心设计说明
 
-**自动排班**（`POST /api/sessions/generate`）：筛选当日透析规律匹配的患者 → 按「风险等级 → 班车接送 → 病历号」排序 → 按感染标记匹配机位分区（普通/乙肝/丙肝/隔离）→ 逐机位计算下一可用上机时刻（上一台结束 + 消毒间隔）→ 生成治疗单并自动预领标准耗材套件。
+**自动排班**（`POST /api/sessions/generate`）：筛选当日透析规律匹配的患者 → 按「风险等级 → 班车接送 → 病历号」排序 → 按感染标记匹配机位分区（普通/乙肝/丙肝/隔离）→ 逐机位计算下一可用上机时刻（上一台结束 + 消毒间隔）→ 生成治疗单并按 FEFO 自动预领标准耗材套件。
 
 **调班影响分析**（`GET /api/sessions/impact`）：执行调班前返回——目标机位当日受影响患者、插入后相邻治疗间隔小于消毒缓冲的压缩项、涉及治疗单已预领的耗材、分区不匹配等警告；确认后 `POST /api/sessions/{id}/move` 执行。
 
-**治疗单详情**（`GET /api/sessions/{id}/detail`）：一个接口聚合患者档案、透前评估、透中记录、透后记录、异常事件、耗材流水、账单、本机位当日消毒记录，即"一条治疗记录"的全貌。
+**治疗单详情**（`GET /api/sessions/{id}/detail`）：一个接口聚合患者档案、透前评估、透中记录、透后记录、异常事件、耗材流水（含批号）、账单、本机位当日消毒记录、关联召回回访，即"一条治疗记录"的全貌；医生可据此在召回回访发现不适时核对当日机器、责任护士、耗材批号与透析参数。
+
+**批次召回**（`POST /api/recalls`）：耗材按「耗材+厂家批号」建台账（`ConsumableBatch`，FEFO 出库）；发起召回（`RecallOrder`）时立即冻结批次（`FROZEN`，`ConsumableService` 出库拦截）并按该批次流向治疗单的预领/使用流水（净数量扣除归还）逐治疗单生成回访记录（`RecallFollowUp`）；请假未治疗者预领自动归还冻结批次、不产生回访。护士回访「报告不适」自动上报异常并转医生复查；未开始治疗可一键换批（召回批号退回冻结、新批次重新预领）；全部回访且不适病例复查完成后才可办结——质量定性与供应商扣分回流到 `/api/recalls/supplier-assessment` 考核，未使用库存生成召回出库退厂。排班看板（`GET /api/sessions/board` 的 `recallWarnings`）对未开始且未换批的治疗自动提示更换批次。

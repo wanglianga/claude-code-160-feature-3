@@ -6,6 +6,7 @@ import com.hd.center.entity.Enums.*;
 import com.hd.center.repository.*;
 import com.hd.center.service.ConsumableService;
 import com.hd.center.service.ExceptionService;
+import com.hd.center.service.RecallService;
 import com.hd.center.service.SchedulingService;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
@@ -39,18 +40,22 @@ public class SessionController {
     private final BillingRecordRepository billingRepo;
     private final ConsumableTxnRepository txnRepo;
     private final DisinfectionRecordRepository disinfectionRepo;
+    private final RecallFollowUpRepository followUpRepo;
     private final SchedulingService schedulingService;
     private final ConsumableService consumableService;
     private final ExceptionService exceptionService;
     private final ConsumableRepository consumableRepo;
+    private final ConsumableBatchRepository batchRepo;
+    private final RecallService recallService;
 
-    /** 看板：某日某班次的机位与治疗单 */
+    /** 看板：某日某班次的机位与治疗单（含召回批次更换提示） */
     @GetMapping("/board")
     public Map<String, Object> board(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
                                      @RequestParam Shift shift) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("machines", machineRepo.findByActiveTrueOrderByCode());
         result.put("sessions", sessionRepo.findBySessionDateAndShiftOrderBySeqNo(date, shift));
+        result.put("recallWarnings", recallService.warningsForDate(date));
         return result;
     }
 
@@ -134,13 +139,19 @@ public class SessionController {
         session.setStatus(SessionStatus.ABSENT);
         sessionRepo.save(session);
 
-        // 预领耗材归还
+        // 预领耗材归还：按批出库的退回原批次，无批次档案的走总量归还
         List<ConsumableTxn> preDrawn = txnRepo.findBySessionId(id).stream()
                 .filter(t -> t.getType() == TxnType.PRE_DRAW).toList();
         for (ConsumableTxn t : preDrawn) {
             Consumable c = consumableRepo.findById(t.getConsumableId()).orElse(null);
-            if (c != null) {
-                consumableService.transact(c, TxnType.RETURN, -t.getQty(), id,
+            if (c == null) continue;
+            int qty = -t.getQty();
+            if (t.getBatchId() != null) {
+                batchRepo.findById(t.getBatchId()).ifPresent(b ->
+                        consumableService.returnToBatch(c, b, qty, id,
+                                session.getPatient().getName(), current.name(), "请假归还预领"));
+            } else {
+                consumableService.transactUnbatched(c, TxnType.RETURN, qty, id,
                         session.getPatient().getName(), current.name(), "请假归还预领");
             }
         }
@@ -177,6 +188,7 @@ public class SessionController {
         result.put("exceptions", exceptionRepo.findBySessionIdOrderByCreatedAt(id));
         result.put("billing", billingRepo.findBySessionId(id).orElse(null));
         result.put("consumables", txnRepo.findBySessionId(id));
+        result.put("recallFollowUps", followUpRepo.findBySessionIdOrderByCreatedAtDesc(id));
         LocalDate day = session.getSessionDate();
         result.put("machineDisinfection", disinfectionRepo.findByMachineIdOrderByDoneAtDesc(session.getMachine().getId())
                 .stream().filter(r -> r.getDoneAt().toLocalDate().equals(day)).limit(10).toList());

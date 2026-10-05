@@ -17,6 +17,14 @@
         <el-button :icon="Plus" @click="addDialog = true">手动加排</el-button>
       </div>
 
+      <el-alert v-if="recallWarningCount" type="error" :closable="false" show-icon class="gen-result">
+        <template #title>
+          有 <b>{{ recallWarningCount }}</b> 条已排治疗预领了召回冻结批次，库房已停发，请前往
+          <el-link type="primary" :underline="false" @click="$router.push('/recalls')">批次召回</el-link>
+          为患者更换批次
+        </template>
+      </el-alert>
+
       <el-alert v-if="generateResult" type="success" :closable="true" class="gen-result"
                 @close="generateResult = null">
         <template #title>
@@ -41,6 +49,14 @@
         <el-table-column label="患者" width="100">
           <template #default="{ row }">
             <el-link type="primary" @click="openDetail(row)">{{ row.patient.name }}</el-link>
+            <el-tooltip v-for="w in recallWarnings[row.id] || []" :key="w.recallId" placement="top">
+              <template #content>
+                该治疗预领了召回批号 {{ w.batchNo }}（{{ w.consumableName }} ×{{ w.usedQty }}），
+                库房停发，请更换批次
+              </template>
+              <el-tag size="small" type="danger" class="recall-tag"
+                      @click.stop="gotoRecall(w.recallId)">召回换批</el-tag>
+            </el-tooltip>
           </template>
         </el-table-column>
         <el-table-column label="感染标记" width="90" align="center">
@@ -182,7 +198,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, MagicStick, Plus } from '@element-plus/icons-vue'
@@ -199,6 +215,8 @@ const sessions = ref([])
 const machines = ref([])
 const ignorePattern = ref(false)
 const generateResult = ref(null)
+const recallWarnings = ref({})
+const recallWarningCount = computed(() => Object.keys(recallWarnings.value).length)
 
 const moveDialog = ref(false)
 const moveTarget = ref(null)
@@ -221,9 +239,14 @@ async function loadBoard() {
     const data = await api.board(date.value, shift.value)
     sessions.value = data.sessions
     machines.value = data.machines
+    recallWarnings.value = data.recallWarnings || {}
   } finally {
     loading.value = false
   }
+}
+
+function gotoRecall(recallId) {
+  router.push({ path: '/recalls', query: { recallId } })
 }
 
 async function doGenerate() {
@@ -310,4 +333,5 @@ onMounted(async () => {
 .impact { display: flex; flex-direction: column; gap: 8px; }
 .impact-block { margin-top: 4px; }
 .impact-title { font-size: 13px; color: #606266; margin-bottom: 6px; }
+.recall-tag { margin-left: 4px; cursor: pointer; }
 </style>

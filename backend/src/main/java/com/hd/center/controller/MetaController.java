@@ -52,15 +52,29 @@ public class MetaController {
                 {"PASS", "合格"}, {"FAIL", "不合格"}}));
         map.put("TxnType", list(new String[][]{
                 {"PRE_DRAW", "预领"}, {"USE", "使用"}, {"RETURN", "归还"},
-                {"WASTE", "损耗"}, {"RESTOCK", "入库"}}));
+                {"WASTE", "损耗"}, {"RESTOCK", "入库"}, {"BATCH_IN", "批次入库"}, {"RECALL_OUT", "召回出库"}}));
         map.put("ExceptionType", list(new String[][]{
                 {"LATE", "患者迟到"}, {"LEAVE", "临时请假"}, {"INFECTION_CHANGE", "感染标记变化"},
                 {"MACHINE_FAULT", "机器故障"}, {"CONSUMABLE_SHORTAGE", "耗材不足"},
-                {"HYPOTENSION", "透析中低血压"}, {"ORDER_CHANGE", "医嘱调整"}, {"OTHER", "其他"}}));
+                {"HYPOTENSION", "透析中低血压"}, {"ORDER_CHANGE", "医嘱调整"},
+                {"CONSUMABLE_RECALL", "耗材召回"}, {"RECALL_DISCOMFORT", "召回回访不适"}, {"OTHER", "其他"}}));
         map.put("ExceptionStatus", list(new String[][]{
                 {"OPEN", "待处理"}, {"PROCESSING", "处理中"}, {"RESOLVED", "已解决"}}));
         map.put("BillingStatus", list(new String[][]{
                 {"PENDING", "待核对"}, {"CONFIRMED", "已核对"}}));
+        map.put("BatchStatus", list(new String[][]{
+                {"ACTIVE", "在库可用"}, {"FROZEN", "召回冻结"}, {"DEPLETED", "已耗尽"}, {"RETURNED", "已退厂家"}}));
+        map.put("RecallStatus", list(new String[][]{
+                {"OPEN", "已发起"}, {"PROCESSING", "回访处理中"}, {"AWAIT_REVIEW", "待复查/办结"}, {"CLOSED", "已办结"}}));
+        map.put("FollowUpStatus", list(new String[][]{
+                {"PENDING", "待回访"}, {"CONTACTED_NO_DISCOMFORT", "已联系无不适"},
+                {"DISCOMFORT", "报告不适"}, {"UNREACHABLE", "无法联系"}}));
+        map.put("ReviewResult", list(new String[][]{
+                {"PENDING", "待复查"}, {"NO_REVIEW_NEEDED", "无需复查"},
+                {"RECHECK_SCHEDULED", "已安排复查"}, {"RECHECK_DONE", "复查完成"}}));
+        map.put("QualityVerdict", list(new String[][]{
+                {"CONFIRMED_DEFECT", "确认质量缺陷"}, {"SUSPECTED", "疑似质量问题"},
+                {"QUALIFIED", "复检合格"}, {"INCONCLUSIVE", "无法判定"}}));
         return map;
     }
 

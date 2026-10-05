@@ -6,6 +6,7 @@ import com.hd.center.repository.*;
 import com.hd.center.service.BillingService;
 import com.hd.center.service.ConsumableService;
 import com.hd.center.service.ExceptionService;
+import com.hd.center.service.RecallService;
 import com.hd.center.service.SchedulingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 首次启动时初始化演示数据：账号、机位、患者、耗材、今日排班与一条完整治疗流水。
@@ -37,11 +39,15 @@ public class DataSeeder implements CommandLineRunner {
     private final PostRecordRepository postRepo;
     private final DisinfectionRecordRepository disinfectionRepo;
     private final ConsumableTxnRepository txnRepo;
+    private final ConsumableBatchRepository batchRepo;
+    private final RecallOrderRepository recallRepo;
+    private final RecallFollowUpRepository followRepo;
     private final PasswordEncoder passwordEncoder;
     private final SchedulingService schedulingService;
     private final BillingService billingService;
     private final ExceptionService exceptionService;
     private final ConsumableService consumableService;
+    private final RecallService recallService;
 
     @Override
     @Transactional
@@ -56,6 +62,7 @@ public class DataSeeder implements CommandLineRunner {
         seedConsumables();
         seedDisinfectionHistory();
         seedTodaySessions();
+        seedRecalls();
         log.info("演示数据初始化完成");
     }
 
@@ -158,30 +165,72 @@ public class DataSeeder implements CommandLineRunner {
         patientRepo.save(p);
     }
 
+    /** 耗材档案（初始库存为 0，库存全部按批次入库）+ 批次库存 */
     private void seedConsumables() {
-        consumable("DIALYZER", "空心纤维透析器", "FX60", "支", 120, 30, false, "0");
-        consumable("BLOODLINE", "体外循环血路管", "成人型", "套", 150, 40, false, "0");
-        consumable("NEEDLE", "内瘘穿刺针", "16G", "支", 200, 60, false, "0");
-        consumable("HEPARIN", "肝素钠注射液", "12500IU", "支", 80, 20, false, "0");
-        consumable("SALINE", "生理盐水", "500ml", "袋", 100, 30, false, "0");
-        consumable("DIALYSATE", "碳酸氢盐透析液", "A液 10L", "桶", 90, 25, false, "0");
-        consumable("DISINFECTANT", "柠檬酸消毒液", "5L", "桶", 40, 10, false, "0");
-        consumable("FILTER", "水处理滤芯", "10寸 PP棉", "支", 8, 3, false, "0");
-        consumable("DRESSING", "自费敷料贴", "防水型", "片", 60, 15, true, "12.50");
+        consumable("DIALYZER", "空心纤维透析器", "FX60", "支", 30, false, "0", "费森尤斯医疗");
+        consumable("BLOODLINE", "体外循环血路管", "成人型", "套", 40, false, "0", "尼普洛贸易");
+        consumable("NEEDLE", "内瘘穿刺针", "16G", "支", 60, false, "0", "威海威高");
+        consumable("HEPARIN", "肝素钠注射液", "12500IU", "支", 20, false, "0", "常州千红制药");
+        consumable("SALINE", "生理盐水", "500ml", "袋", 30, false, "0", "四川科伦药业");
+        consumable("DIALYSATE", "碳酸氢盐透析液", "A液 10L", "桶", 25, false, "0", "广州康盛生物");
+        consumable("DISINFECTANT", "柠檬酸消毒液", "5L", "桶", 10, false, "0", "山东利尔康");
+        consumable("FILTER", "水处理滤芯", "10寸 PP棉", "支", 3, false, "0", "杭州沁园");
+        consumable("DRESSING", "自费敷料贴", "防水型", "片", 15, true, "12.50", "3M 中国");
+
+        // 按厂家批号入库：批号、供应商、生产偏移天数、失效偏移天数、数量
+        LocalDate today = LocalDate.now();
+        batches("DIALYZER", "费森尤斯医疗", new Object[][]{
+                {"DLZ-260401", today.minusMonths(6), today.plusMonths(18), 40},
+                {"DLZ-260515", today.minusMonths(5), today.plusMonths(19), 45},
+                {"DLZ-260708", today.minusMonths(3), today.plusMonths(21), 35}});
+        batches("BLOODLINE", "尼普洛贸易", new Object[][]{
+                {"BLL-260310", today.minusMonths(7), today.plusMonths(17), 70},
+                {"BLL-260620", today.minusMonths(4), today.plusMonths(20), 80}});
+        batches("NEEDLE", "威海威高", new Object[][]{
+                {"NDL-260201", today.minusMonths(8), today.plusMonths(16), 90},
+                {"NDL-260701", today.minusMonths(3), today.plusMonths(21), 110}});
+        batches("HEPARIN", "常州千红制药", new Object[][]{
+                {"HEP-260501", today.minusMonths(5), today.plusMonths(19), 40},
+                {"HEP-260810", today.minusMonths(2), today.plusMonths(22), 40}});
+        batches("SALINE", "四川科伦药业", new Object[][]{
+                {"SLN-260720", today.minusMonths(3), today.plusMonths(21), 50},
+                {"SLN-260901", today.minusMonths(1), today.plusMonths(23), 50}});
+        batches("DIALYSATE", "广州康盛生物", new Object[][]{
+                {"DLS-260615", today.minusMonths(4), today.plusMonths(8), 45},
+                {"DLS-260905", today.minusMonths(1), today.plusMonths(11), 45}});
+        batches("DISINFECTANT", "山东利尔康", new Object[][]{
+                {"DSF-260401", today.minusMonths(6), today.plusMonths(18), 20},
+                {"DSF-260801", today.minusMonths(2), today.plusMonths(22), 20}});
+        batches("FILTER", "杭州沁园", new Object[][]{
+                {"FLT-260301", today.minusMonths(7), today.plusMonths(29), 4},
+                {"FLT-260901", today.minusMonths(1), today.plusMonths(35), 4}});
+        batches("DRESSING", "3M 中国", new Object[][]{
+                {"DRS-260501", today.minusMonths(5), today.plusMonths(19), 25},
+                {"DRS-260801", today.minusMonths(2), today.plusMonths(22), 35}});
     }
 
-    private void consumable(String code, String name, String spec, String unit, int stock,
-                            int safeStock, boolean selfPay, String price) {
+    private void consumable(String code, String name, String spec, String unit,
+                            int safeStock, boolean selfPay, String price, String supplier) {
         Consumable c = new Consumable();
         c.setCode(code);
         c.setName(name);
         c.setSpec(spec);
+        c.setSupplier(supplier);
         c.setUnit(unit);
-        c.setStock(stock);
+        c.setStock(0);
         c.setSafeStock(safeStock);
         c.setSelfPay(selfPay);
         c.setPrice(new BigDecimal(price));
         consumableRepo.save(c);
+    }
+
+    private void batches(String code, String supplier, Object[][] rows) {
+        Consumable c = consumableRepo.findAllByOrderByCode().stream()
+                .filter(x -> x.getCode().equals(code)).findFirst().orElseThrow();
+        for (Object[] r : rows) {
+            consumableService.inboundBatch(c, (String) r[0], supplier, (LocalDate) r[1],
+                    (LocalDate) r[2], (Integer) r[3], "系统初始化", "演示批次入库");
+        }
     }
 
     /** 过去三天每台机的日常消毒记录（消毒合规统计用） */
@@ -303,13 +352,13 @@ public class DataSeeder implements CommandLineRunner {
         exceptionService.raise(ExceptionType.LATE, s5.getPatient(), s5, s5.getMachine(),
                 "患者迟到约 25 分钟，班车晚点", "张岚");
 
-        // 6) 耗材损耗演示
+        // 6) 耗材损耗演示（按 FEFO 出在最早批次）
         consumableRepo.findAllByOrderByCode().stream()
                 .filter(c -> c.getCode().equals("NEEDLE")).findFirst()
-                .ifPresent(c -> consumableService.transact(c, TxnType.WASTE, 2, null, null, "李静", "包装破损报废"));
+                .ifPresent(c -> consumableService.outboundFefo(c, TxnType.WASTE, 2, null, null, "李静", "包装破损报废"));
         consumableRepo.findAllByOrderByCode().stream()
                 .filter(c -> c.getCode().equals("SALINE")).findFirst()
-                .ifPresent(c -> consumableService.transact(c, TxnType.WASTE, 1, null, null, "张岚", "污染报废"));
+                .ifPresent(c -> consumableService.outboundFefo(c, TxnType.WASTE, 1, null, null, "张岚", "污染报废"));
 
         // 7) 一台空闲机位维护
         machineRepo.findByActiveTrueOrderByCode().stream()
@@ -345,5 +394,65 @@ public class DataSeeder implements CommandLineRunner {
         r.setOrderChange(orderChange);
         r.setNurseName("李静");
         intraRepo.save(r);
+    }
+
+    /**
+     * 召回演示：
+     * 1) 透析器最早批次被厂家召回（处理中）——覆盖待换批治疗、已用治疗回访不适→医生复查、无不适；
+     * 2) 一批柠檬酸消毒液召回已办结（确认质量缺陷、退厂、供应商扣分），用于供应商考核展示。
+     */
+    private void seedRecalls() {
+        LocalDate today = LocalDate.now();
+
+        Consumable dialyzer = consumableRepo.findAllByOrderByCode().stream()
+                .filter(c -> c.getCode().equals("DIALYZER")).findFirst().orElseThrow();
+        List<ConsumableBatch> dialyzerBatches =
+                batchRepo.findByConsumableIdOrderByExpiryDateAscIdAsc(dialyzer.getId());
+        ConsumableBatch recalledBatch = dialyzerBatches.get(0);
+        ConsumableBatch safeBatch = dialyzerBatches.stream()
+                .filter(b -> !b.getBatchNo().equals(recalledBatch.getBatchNo())
+                        && b.getStatus() == Enums.BatchStatus.ACTIVE && b.getStockQty() > 0)
+                .findFirst().orElseThrow();
+
+        Map<String, Object> detail = recallService.initiate(dialyzer.getId(), recalledBatch.getBatchNo(),
+                "厂家来函：该批次透析器中空纤维膜封装工艺偏差，极端情况下可能出现破膜漏血风险，要求立即停用召回",
+                "FME-RC-20261005", null, "王敏（护士长）");
+        Long recallId = ((RecallOrder) detail.get("recall")).getId();
+        @SuppressWarnings("unchecked")
+        List<RecallFollowUp> followUps = (List<RecallFollowUp>) detail.get("followUps");
+
+        List<DialysisSession> am = sessionRepo.findBySessionDateAndShiftOrderBySeqNo(today, Shift.AM);
+        // 已完成下机（s0）：回访无不适
+        findFollow(followUps, am.get(0).getId()).ifPresent(fu ->
+                recallService.followUp(recallId, fu.getId(), Enums.FollowUpStatus.CONTACTED_NO_DISCOMFORT,
+                        "电话回访，患者诉本次透析后无发热、寒战、皮疹等不适", null, "李静"));
+        // 透析中低血压那位（s1）：回访发现不适 -> 医生查看治疗记录后安排复查
+        findFollow(followUps, am.get(1).getId()).ifPresent(fu -> {
+            recallService.followUp(recallId, fu.getId(), Enums.FollowUpStatus.DISCOMFORT,
+                    "患者诉透析当日下午低热 37.8℃、畏寒，次日缓解", "透析后低热、畏寒", "李静");
+            recallService.review(recallId, fu.getId(), Enums.ReviewResult.RECHECK_SCHEDULED,
+                    "本周六加查血常规、CRP、降钙素原，透析前复测体温；必要时血培养",
+                    "已从治疗单核对当日机位与护士、透析器批号及透中参数（低血压、静推葡萄糖），"
+                            + "不能排除批次相关反应，安排复查", "陈国强");
+        });
+        // 一条已评估待上机的（s3）：一键更换到安全批次，演示已排治疗的召回换批闭环
+        findFollow(followUps, am.get(2).getId()).ifPresent(fu ->
+                recallService.replaceBatch(recallId, fu.getId(), safeBatch.getId(), "王敏（护士长）"));
+        // 其余待治疗/请假/PM 班记录保持「待回访」，用于演示看板提示与逐例回访
+
+        // 已办结召回：柠檬酸消毒液（无治疗使用记录，剩余库存整批退厂）
+        Consumable disinfectant = consumableRepo.findAllByOrderByCode().stream()
+                .filter(c -> c.getCode().equals("DISINFECTANT")).findFirst().orElseThrow();
+        ConsumableBatch disBatch = batchRepo.findByConsumableIdOrderByExpiryDateAscIdAsc(disinfectant.getId())
+                .get(0);
+        Map<String, Object> closedDetail = recallService.initiate(disinfectant.getId(), disBatch.getBatchNo(),
+                "上季度抽查该批次消毒液有效成分含量低于标示值，厂家主动召回", "LEK-RC-20260918", null, "赵工");
+        Long closedId = ((RecallOrder) closedDetail.get("recall")).getId();
+        recallService.close(closedId, Enums.QualityVerdict.CONFIRMED_DEFECT, 20, true,
+                "剩余库存整批退回厂家，更换合格批次并加密进货验收；纳入本季度供应商考核", "王敏（护士长）");
+    }
+
+    private java.util.Optional<RecallFollowUp> findFollow(List<RecallFollowUp> followUps, Long sessionId) {
+        return followUps.stream().filter(f -> f.getSessionId().equals(sessionId)).findFirst();
     }
 }

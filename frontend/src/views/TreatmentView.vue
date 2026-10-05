@@ -59,6 +59,27 @@
             </div>
           </template>
 
+          <el-alert v-for="rf in (current.recallFollowUps || [])" :key="rf.id"
+                    :type="rf.discomfort ? 'error' : 'warning'" :closable="false" show-icon
+                    style="margin-bottom:10px">
+            <template #title>
+              耗材召回关联：该治疗使用的耗材在召回范围内，
+              <el-link type="primary" :underline="false" @click="gotoRecall(rf.recallId)">
+                查看召回单 #{{ rf.recallId }}
+              </el-link>
+              ｜回访：
+              <el-tag size="small" :type="tagType('FollowUpStatus', rf.status)">
+                {{ label('FollowUpStatus', rf.status) }}
+              </el-tag>
+              <template v-if="rf.discomfort">
+                ｜患者报告不适：{{ rf.discomfortSymptoms }}
+                <el-tag size="small" :type="tagType('ReviewResult', rf.reviewResult)" style="margin-left:4px">
+                  {{ label('ReviewResult', rf.reviewResult) }}
+                </el-tag>
+              </template>
+            </template>
+          </el-alert>
+
           <el-tabs v-model="tab">
             <!-- 总览 -->
             <el-tab-pane label="治疗单总览" name="overview">
@@ -245,7 +266,15 @@
             <el-tab-pane label="耗材与费用" name="fee">
               <div class="section-title">本治疗单耗材流水</div>
               <el-table :data="current.consumables" size="small">
-                <el-table-column prop="consumableName" label="耗材" />
+                <el-table-column prop="consumableName" label="耗材" min-width="120" />
+                <el-table-column label="批号" width="110">
+                  <template #default="{ row }">
+                    <span v-if="row.batchNo" :style="isRecalledLot(row.batchNo) ? 'color:#f56c6c;font-weight:600' : ''">
+                      {{ row.batchNo }}
+                    </span>
+                    <span v-else class="sub">—</span>
+                  </template>
+                </el-table-column>
                 <el-table-column label="类型" width="80">
                   <template #default="{ row }">
                     <el-tag size="small">{{ label('TxnType', row.type) }}</el-tag>
@@ -329,14 +358,15 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../api'
 import { label, tagType, options, fmtTime } from '../utils/labels'
 import dayjs from 'dayjs'
 
 const route = useRoute()
+const router = useRouter()
 const date = ref(dayjs().format('YYYY-MM-DD'))
 const shift = ref('AM')
 const sessions = ref([])
@@ -394,6 +424,17 @@ function fillForms() {
 
 async function reload() {
   if (current.value) await select(current.value.session.id)
+}
+
+function gotoRecall(recallId) {
+  router.push({ path: '/recalls', query: { recallId } })
+}
+
+/** 该批号是否出现在本治疗单关联的召回回访中 */
+const recalledBatchNos = computed(() => new Set(
+  (current.value?.recallFollowUps || []).map(rf => rf.batchNo).filter(Boolean)))
+function isRecalledLot(batchNo) {
+  return recalledBatchNos.value.has(batchNo)
 }
 
 async function start() {

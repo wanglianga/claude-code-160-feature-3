@@ -65,8 +65,22 @@ export default {
   createConsumable: (data) => http.post('/consumables', data),
   updateConsumable: (id, data) => http.put(`/consumables/${id}`, data),
   consumableTxn: (id, data) => http.post(`/consumables/${id}/txn`, data),
+  consumableReturn: (id, data) => http.post(`/consumables/${id}/return`, data),
   consumableTxns: (params) => http.get('/consumables/txns', { params }),
   consumableWarnings: () => http.get('/consumables/warnings'),
+  // 批次
+  batches: (consumableId) => http.get('/consumables/batches', { params: { consumableId } }),
+  batchInbound: (id, data) => http.post(`/consumables/${id}/batches`, data),
+  batchTxns: (batchId) => http.get(`/consumables/batches/${batchId}/txns`),
+  // 批次召回
+  recalls: (status) => http.get('/recalls', { params: { status } }),
+  recallDetail: (id) => http.get(`/recalls/${id}`),
+  createRecall: (data) => http.post('/recalls', data),
+  recallFollowUp: (id, fid, data) => http.post(`/recalls/${id}/follow-ups/${fid}`, data),
+  recallReview: (id, fid, data) => http.post(`/recalls/${id}/follow-ups/${fid}/review`, data),
+  recallReplace: (id, fid, replacementBatchId) => http.post(`/recalls/${id}/follow-ups/${fid}/replace`, { replacementBatchId }),
+  closeRecall: (id, data) => http.post(`/recalls/${id}/close`, data),
+  supplierAssessment: () => http.get('/recalls/supplier-assessment'),
   // 异常
   exceptions: (status) => http.get('/exceptions', { params: { status } }),
   createException: (data) => http.post('/exceptions', data),

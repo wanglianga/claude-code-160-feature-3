@@ -26,6 +26,10 @@ public class Consumable {
     @Column(length = 128)
     private String spec;
 
+    /** 默认供应商（批次可覆盖），供应商考核按此归集 */
+    @Column(length = 128)
+    private String supplier;
+
     @Column(length = 16)
     private String unit;
 

@@ -47,14 +47,41 @@ public final class Enums {
     public enum DisinfectionResult { PASS, FAIL }
 
     /** 耗材出入库类型 */
-    public enum TxnType { PRE_DRAW, USE, RETURN, WASTE, RESTOCK }
+    public enum TxnType { PRE_DRAW, USE, RETURN, WASTE, RESTOCK, RECALL_OUT, BATCH_IN }
 
     /** 异常事件类型 */
-    public enum ExceptionType { LATE, LEAVE, INFECTION_CHANGE, MACHINE_FAULT, CONSUMABLE_SHORTAGE, HYPOTENSION, ORDER_CHANGE, OTHER }
+    public enum ExceptionType {
+        LATE, LEAVE, INFECTION_CHANGE, MACHINE_FAULT, CONSUMABLE_SHORTAGE, HYPOTENSION, ORDER_CHANGE,
+        CONSUMABLE_RECALL, RECALL_DISCOMFORT, OTHER
+    }
 
     /** 异常处理状态 */
     public enum ExceptionStatus { OPEN, PROCESSING, RESOLVED }
 
     /** 收费核对状态 */
     public enum BillingStatus { PENDING, CONFIRMED }
+
+    /** 耗材批次状态：在库可用 / 冻结（召回处理中）/ 已耗尽 / 已退回厂家 */
+    public enum BatchStatus { ACTIVE, FROZEN, DEPLETED, RETURNED }
+
+    /** 召回单状态 */
+    public enum RecallStatus {
+        /** 已发起，等待护士回访/库管冻结 */
+        OPEN,
+        /** 回访处理中（冻结完成、逐例回访） */
+        PROCESSING,
+        /** 回访全部完成，等待医生复查结论 */
+        AWAIT_REVIEW,
+        /** 已办结并进入质量与供应商考核 */
+        CLOSED
+    }
+
+    /** 召回回访状态 */
+    public enum FollowUpStatus { PENDING, CONTACTED_NO_DISCOMFORT, DISCOMFORT, UNREACHABLE }
+
+    /** 医生复查结论 */
+    public enum ReviewResult { PENDING, NO_REVIEW_NEEDED, RECHECK_SCHEDULED, RECHECK_DONE }
+
+    /** 召回质量定性 */
+    public enum QualityVerdict { CONFIRMED_DEFECT, SUSPECTED, QUALIFIED, INCONCLUSIVE }
 }

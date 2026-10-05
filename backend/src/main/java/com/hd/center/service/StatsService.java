@@ -27,6 +27,7 @@ public class StatsService {
     private final ConsumableTxnRepository txnRepo;
     private final ConsumableRepository consumableRepo;
     private final DisinfectionRecordRepository disinfectionRepo;
+    private final RecallOrderRepository recallRepo;
 
     /** 今日工作台总览 */
     public Map<String, Object> dashboard() {
@@ -66,6 +67,11 @@ public class StatsService {
                     return m;
                 }).toList();
         result.put("lowStock", lowStock);
+
+        // 进行中的耗材召回
+        List<RecallOrder> activeRecalls = recallRepo.findByStatusNotOrderByCreatedAtDesc(RecallStatus.CLOSED);
+        result.put("activeRecallCount", activeRecalls.size());
+        result.put("activeRecalls", activeRecalls.stream().limit(5).toList());
         return result;
     }
 

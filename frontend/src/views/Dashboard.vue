@@ -21,11 +21,22 @@
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <div class="stat-num" style="color:#e6a23c">{{ data.lowStock?.length || 0 }}</div>
+          <div class="stat-num" style="color:#f56c6c">{{ data.lowStock?.length || 0 }}</div>
           <div class="stat-label">耗材预警</div>
         </el-card>
       </el-col>
     </el-row>
+
+    <el-alert v-if="data.activeRecallCount" type="error" show-icon :closable="false" style="margin-top:16px"
+              @click="$router.push('/recalls')">
+      <template #title>
+        <b>耗材批次召回处理中（{{ data.activeRecallCount }}）</b>
+        <span v-for="r in (data.activeRecalls || [])" :key="r.id" style="margin-left:12px">
+          {{ r.consumableName }}·批号 {{ r.batchNo }}（受影响 {{ r.affectedSessionCount }} 条治疗/{{ r.affectedPatientCount }} 人）
+        </span>
+        <el-link type="primary" :underline="false" style="margin-left:12px">前往处理 →</el-link>
+      </template>
+    </el-alert>
 
     <el-row :gutter="16" style="margin-top:16px">
       <el-col :span="14">
